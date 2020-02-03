@@ -1,0 +1,12 @@
+name: Datapack Merger
+version: "0.0.1"
+author: Boomber <boomberisalreadytaken@gmail.com>
+about: A simple datapack merger written in Rust
+args:
+  - directory:
+      short: d
+      long: directory
+      required: true
+      help: path to directory containing datapacks to be merge
+      index: 1
+      allow_hyphen_values: false

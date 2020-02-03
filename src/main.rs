@@ -1,31 +1,23 @@
-use clap::{App, Arg};
+#[macro_use]
+extern crate clap;
+
+use clap::App;
 use colored::*;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 
-use dialoguer::{Select};
 use dialoguer::theme::ColorfulTheme;
+use dialoguer::Select;
 
-use std::fs::{DirEntry, remove_dir_all};
-use std::path::{Path};
+use std::fs::{remove_dir_all, DirEntry};
+use std::path::Path;
 use std::thread;
 
 mod zip_peaker;
 
 fn main() {
-	let matches = App::new("datapack-merger")
-		.version("0.0.1")
-		.about("{Program Name} is a datapack merger tool")
-		.author("Boomber <boomberisalreadytaken@gmail.com>")
-		.arg(
-			Arg::with_name("directory")
-				.short("d")
-				.long("directory")
-				.required(true)
-				.index(1)
-				.help("Path to directory containing datapacks to be merge"),
-		)
-		.get_matches();
+	let yaml = load_yaml!("../resource/cli.yml");
+	let matches = App::from_yaml(yaml).get_matches();
 
 	let directory = matches.value_of("directory").unwrap();
 	let directory = Path::new(directory);
@@ -58,18 +50,23 @@ fn merge(directory: &Path) {
 		// .filter(|entry: &DirEntry| entry.path().is_file() && entry.path().ends_with(".zip"))
 		.collect();
 
-	let selection_items: Vec<String> = result.iter().map(|entry: &DirEntry| entry.file_name().to_str().unwrap().to_string()).collect();
+	let selection_items: Vec<String> = result
+		.iter()
+		.map(|entry: &DirEntry| entry.file_name().to_str().unwrap().to_string())
+		.collect();
 
 	let _selection = Select::with_theme(&ColorfulTheme::default())
 		.with_prompt("Please choose core datapack")
 		.default(0)
 		.items(&selection_items)
-		.interact().unwrap();
+		.interact()
+		.unwrap();
 
 	let progress_bars = MultiProgress::new();
 
 	// Map all "datapack names" to numerical value
-	let mut name_lengths: Vec<usize> = result.iter()
+	let mut name_lengths: Vec<usize> = result
+		.iter()
 		.map(|entry| entry.file_name().to_str().unwrap().to_string().len())
 		.collect();
 	// Sort it to quickly get the highest value
@@ -100,13 +97,17 @@ fn merge(directory: &Path) {
 	remove_dir_all(&temp_dir).unwrap();
 }
 
-fn create_progress_bar(multi_progress: &MultiProgress, entry: &DirEntry, width: usize) -> ProgressBar {
+fn create_progress_bar(
+	multi_progress: &MultiProgress,
+	entry: &DirEntry,
+	width: usize,
+) -> ProgressBar {
 	let entry_name = entry.file_name().to_str().unwrap().bright_green().bold();
 	let template = format!("[{{elapsed}}] {:<width$} [{{wide_bar:.cyan/white}}] {{pos:>4}}/{{len:4}} {{percent:>3}}% ({{eta:^4}})", entry_name, width = width);
-	let progress_bar = ProgressBar::new(1000)
-		.with_style(ProgressStyle::default_bar()
+	let progress_bar = ProgressBar::new(1000).with_style(
+		ProgressStyle::default_bar()
 			.template(&template)
-			.progress_chars("#>-")
-		);
+			.progress_chars("#>-"),
+	);
 	multi_progress.add(progress_bar)
 }
