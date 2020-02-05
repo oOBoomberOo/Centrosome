@@ -1,8 +1,8 @@
-use crate::datapack::Resource;
-use crate::utils::Result;
+use super::Datapack;
+use crate::utils::{get_path_name, Result};
 use indicatif::ProgressBar;
-use std::fs::File;
-use std::io::{BufReader, Read};
+use std::fs::{create_dir_all, remove_dir_all, File};
+use std::io::{BufReader};
 use std::path::PathBuf;
 use zip::ZipArchive;
 
@@ -39,39 +39,95 @@ impl Zipper {
 		(false, false)
 	}
 
-	pub fn extract(&self) -> Vec<Resource> {
-		use crate::datapack::traverse_directory;
-
-		let mut result = Vec::default();
-
+	pub fn datapack(&self) -> Result<Datapack> {
 		if self.reader_location.is_dir() {
-			result = traverse_directory(&self.reader_location, &self.reader_location).unwrap_or_default();
-		} else if self.reader_location.is_file() {
-			let reader = self.reader_location.to_owned();
-			let file = File::open(reader).expect("Unable to open file");
-			let reader = BufReader::new(file);
-			let mut archive = ZipArchive::new(reader).expect("Unable to extract file");
-			self.progress_bar.set_length(archive.len() as u64);
+			self.progress_bar.finish();
+			Ok(Datapack::generate(&self.reader_location).unwrap_or_default())
+		} else if let Ok(extract_location) = self.extract() {
+			let result = Datapack::generate(&extract_location).unwrap_or_default();
+			remove_dir_all(extract_location).unwrap();
+			Ok(result)
+		} else {
+			self.progress_bar.abandon();
+			Err(Box::new(ZipperError::UnableToConvertDatapack))
+		}
+	}
+	pub fn extract(&self) -> Result<PathBuf> {
+		let node = &self.reader_location;
+		let name = get_path_name(&node);
+		let location = std::env::temp_dir().join(name);
+		create_dir_all(&location)?;
+		let file = File::open(node)?;
+		let reader = BufReader::new(file);
+		let mut archive = ZipArchive::new(reader)?;
+		self.progress_bar.set_length(archive.len() as u64);
 
-			for n in 0..archive.len() {
-				self.progress_bar.inc(1);
+		for n in 0..archive.len() {
+			let mut file = archive.by_index(n)?;
+			let name = file.sanitized_name();
+			self.progress_bar.inc(1);
 
-				let mut file = archive
-					.by_index(n)
-					.expect("An error occur while extracting file");
-				if file.is_file() {
-					let path = file.sanitized_name();
-					let mut data = String::new();
-					file.read_to_string(&mut data).unwrap_or_default();
-					let resource = Resource::from_data(&data, path);
+			let output = location.join(name);
 
-					result.push(resource);
+			if file.name().ends_with('/') {
+				create_dir_all(output)?;
+			} else {
+				if let Some(parent) = output.parent() {
+					create_dir_all(parent)?;
 				}
+
+				let mut writer = File::create(output)?;
+				std::io::copy(&mut file, &mut writer)?;
 			}
 		}
 
 		self.progress_bar.finish();
 
-		result
+		Ok(location)
 	}
+}
+
+#[derive(Debug)]
+pub enum ZipperError {
+	Io(std::io::Error),
+	UnableToConvertDatapack,
+}
+
+use std::error;
+use std::fmt;
+
+impl fmt::Display for ZipperError {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			ZipperError::Io(error) => write!(f, "{}", error),
+			ZipperError::UnableToConvertDatapack => write!(f, "Unable to convert to datapack"),
+		}
+	}
+}
+
+impl error::Error for ZipperError {
+	fn description(&self) -> &str {
+		match *self {
+			ZipperError::Io(ref io_err) => (io_err as &dyn error::Error).description(),
+			ZipperError::UnableToConvertDatapack => "Unable to convert to datapack",
+		}
+	}
+
+	fn cause(&self) -> Option<&dyn error::Error> {
+		match *self {
+			ZipperError::Io(ref io_err) => Some(io_err as &dyn error::Error),
+			_ => None,
+		}
+	}
+}
+
+use std::io;
+use std::convert;
+
+impl convert::From<ZipperError> for io::Error
+{
+    fn from(err: ZipperError) -> io::Error
+    {
+        io::Error::new(io::ErrorKind::Other, err)
+    }
 }

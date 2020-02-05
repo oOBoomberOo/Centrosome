@@ -3,7 +3,7 @@ use colored::*;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::error::Error;
 use std::fs::{DirEntry};
-use std::path::{Path};
+use std::path::{Path, PathBuf};
 use std::ffi::OsStr;
 use rayon::prelude::*;
 
@@ -73,4 +73,12 @@ fn file_metadata(entry: &DirEntry) -> bool {
 	else {
 		false
 	}
+}
+
+pub fn get_path_name(path: &PathBuf) -> String {
+	path.file_name()
+		.unwrap_or_default()
+		.to_str()
+		.unwrap_or_default()
+		.to_string()
 }

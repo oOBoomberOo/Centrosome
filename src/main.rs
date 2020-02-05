@@ -10,15 +10,15 @@ use dialoguer::theme::ColorfulTheme;
 use dialoguer::Select;
 
 use std::fs::DirEntry;
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 use std::thread;
 use std::io::{stdout, Write};
 
-mod datapack;
+mod datapacks;
 mod utils;
 mod zipper;
 
-use datapack::Resource;
+use datapacks::{Datapack};
 use utils::{create_zipper, entry_name, get_longest_name_length, read_directory, Result};
 use zipper::Zipper;
 
@@ -79,12 +79,20 @@ fn merge(directory: &Path) -> Result<()> {
 		.filter_map(|entry| create_zipper(&entry, &temp_dir, max_length, &progress_bars).ok())
 		.collect();
 
+	let mut threads = Vec::default();
+
 	// MultiProgress have to be run in another thread so that .par_iter() won't block each other process.
-	thread::spawn(move || {
+	let progress_bar_thread = thread::spawn(move || {
 		progress_bars.join().unwrap();
 	});
 
-	let result: Vec<Vec<Resource>> = zippers.par_iter().map(|zipper| zipper.extract()).collect();
+	threads.push(progress_bar_thread);
+
+	let result: Vec<Datapack> = zippers.par_iter().filter_map(|zipper| zipper.datapack().ok()).collect();
+
+	for process in threads {
+		process.join().expect("panic in child thread");
+	}
 
 	println!("{:#?}", result);
 
