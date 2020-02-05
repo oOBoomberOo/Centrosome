@@ -3,7 +3,7 @@ extern crate clap;
 
 use clap::App;
 use colored::*;
-use indicatif::MultiProgress;
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 
 use dialoguer::theme::ColorfulTheme;
@@ -51,8 +51,15 @@ fn main() {
 fn merge(directory: &Path) -> Result<()> {
 	let temp_dir = std::env::temp_dir().join("datapack-merger");
 
+	let setting_up_progress_bar = ProgressBar::new(100)
+		.with_style(
+			ProgressStyle::default_bar()
+				.template("Setting up {spinner} [{wide_bar:.cyan/white}] {pos:.green}/{len:.white} {percent}% ({eta})")
+				.progress_chars("#>_")
+		);
+
 	// Return all zip files in `directory`
-	let result: Vec<DirEntry> = read_directory(directory)?;
+	let result: Vec<DirEntry> = read_directory(directory, setting_up_progress_bar)?;
 
 	let selection_items: Vec<String> = result
 		.iter()
@@ -94,7 +101,8 @@ fn merge(directory: &Path) -> Result<()> {
 		process.join().expect("panic in child thread");
 	}
 
-	println!("{:#?}", result);
+	// println!("{:#?}", result);
+	println!("Finished encoding {} datapacks.", result.len());
 
 	Ok(())
 }

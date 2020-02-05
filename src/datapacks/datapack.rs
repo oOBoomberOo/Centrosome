@@ -7,7 +7,8 @@ use crate::utils::{Result, get_path_name};
 pub struct Datapack {
 	location: PathBuf,
 	pub name: String,
-	pub namespace: HashMap<String, Namespace>
+	pub namespace: HashMap<String, Namespace>,
+	pub size: u64
 }
 
 impl Datapack {
@@ -15,32 +16,29 @@ impl Datapack {
 		let location = location.into();
 		let name = get_path_name(&location);
 		let namespace = HashMap::default();
-		Datapack { location, name, namespace }
+		Datapack { location, name, namespace, size: 0 }
 	}
 
 	pub fn generate(location: impl Into<PathBuf>) -> Result<Datapack> {
 		let location = location.into();
 		let name = get_path_name(&location);
 		let mut namespace = HashMap::default();
+		let mut size = 0;
 
-		for entry in location.read_dir()? {
+		for entry in location.join("data").read_dir()? {
 			if let Ok(entry) = entry {
 				let path = entry.path();
 				let name = get_path_name(&path);
 
-				let result = Namespace::generate(path)?;
+				let (result, count) = Namespace::generate(path)?;
 				namespace.insert(name, result);
+				size += count;
 			}
 		}
 
-		let datapack = Datapack { location, name, namespace };
+		let datapack = Datapack { location, name, namespace, size };
 
 		Ok(datapack)
-	}
-
-	pub fn add_namespace(&mut self, namespace: Namespace) {
-		let name = namespace.name.clone();
-		self.namespace.insert(name, namespace);
 	}
 }
 

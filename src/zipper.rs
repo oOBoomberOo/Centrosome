@@ -2,22 +2,26 @@ use super::Datapack;
 use crate::utils::{get_path_name, Result};
 use indicatif::ProgressBar;
 use std::fs::{create_dir_all, remove_dir_all, File};
-use std::io::{BufReader};
+use std::io::BufReader;
 use std::path::PathBuf;
 use zip::ZipArchive;
+use flate2::read::GzDecoder;
+use tar::Archive;
 
 #[derive(Debug)]
 pub struct Zipper {
 	reader_location: PathBuf,
 	progress_bar: ProgressBar,
+	format: CompressionFormat,
 }
 
 impl Zipper {
-	pub fn new(reader_location: PathBuf) -> Zipper {
+	pub fn new(reader_location: PathBuf, format: CompressionFormat) -> Zipper {
 		let progress_bar = ProgressBar::hidden();
 		Zipper {
 			reader_location,
 			progress_bar,
+			format,
 		}
 	}
 
@@ -26,14 +30,51 @@ impl Zipper {
 		self
 	}
 
-	pub fn peak(&self, path: &str) -> (bool, bool) {
+	pub fn peak(&self, path: &str, temp_dir: &PathBuf) -> (bool, bool) {
 		let reader = self.reader_location.to_owned();
 		if let Ok(file) = File::open(reader) {
-			let reader = BufReader::new(file);
-			if let Ok(mut archive) = ZipArchive::new(reader) {
-				if let Ok(result) = archive.by_name(path) {
-					return (result.is_file(), result.is_dir());
-				}
+			match self.format {
+				CompressionFormat::Zip => {
+					let reader = BufReader::new(file);
+					if let Ok(mut archive) = ZipArchive::new(reader) {
+						if let Ok(result) = archive.by_name(path) {
+							return (result.is_file(), result.is_dir());
+						}
+					}
+				},
+				CompressionFormat::Tar => {
+					let temp = temp_dir.join(path);
+					create_dir_all(&temp).expect("Unable to create temporary folder");
+
+					let tar = GzDecoder::new(file);
+					let mut archive = Archive::new(tar);
+
+					let result: Vec<(bool, bool)> = archive.entries()
+						.unwrap()
+						.filter_map(|entry| entry.ok())
+						.filter_map(|mut entry| -> Option<(bool, bool)> {
+							let relative_path = entry.path().unwrap().to_owned();
+							if PathBuf::from(path) == relative_path {
+								let location = temp.join(&relative_path);
+								entry.unpack(&location).unwrap();
+
+								Some((location.is_file(), location.is_dir()))
+							}
+							else {
+								None
+							}
+						})
+						.collect();
+					let result = match result.iter().next() {
+						Some(value) => value.to_owned(),
+						None => (false, false)
+					};
+
+					remove_dir_all(&temp).expect("Unable to remove temporary folder");
+
+					return result;
+				},
+				_ => ()
 			}
 		}
 		(false, false)
@@ -41,8 +82,11 @@ impl Zipper {
 
 	pub fn datapack(&self) -> Result<Datapack> {
 		if self.reader_location.is_dir() {
-			self.progress_bar.finish();
-			Ok(Datapack::generate(&self.reader_location).unwrap_or_default())
+			let result = Datapack::generate(&self.reader_location).unwrap_or_default();
+			self.progress_bar.set_length(result.size);
+			self.progress_bar.finish_and_clear();
+
+			Ok(result)
 		} else if let Ok(extract_location) = self.extract() {
 			let result = Datapack::generate(&extract_location).unwrap_or_default();
 			remove_dir_all(extract_location).unwrap();
@@ -58,6 +102,42 @@ impl Zipper {
 		let location = std::env::temp_dir().join(name);
 		create_dir_all(&location)?;
 		let file = File::open(node)?;
+
+		match self.format {
+			CompressionFormat::Zip => self.extract_zip(file, &location)?,
+			CompressionFormat::Tar => self.extract_tar(file, &location, &node)?,
+			_ => ()
+		}
+
+		Ok(location)
+	}
+
+	fn extract_tar(&self, file: File, location: &PathBuf, prefix: &PathBuf) -> Result<()> {
+		use tar::Entry;
+
+		let tar = GzDecoder::new(file);
+		let mut archive = Archive::new(tar);
+		let mut archive: Vec<Entry<GzDecoder<File>>> = archive.entries()?.filter_map(|entry| entry.ok()).collect();
+		self.progress_bar.set_length(archive.len() as u64);
+
+		archive
+			.iter_mut()
+			.map(|entry| -> Result<PathBuf> {
+				let relative_path = entry.path()?.strip_prefix(prefix)?.to_owned();
+				let path = location.join(relative_path);
+				entry.unpack(&path)?;
+				self.progress_bar.inc(1);
+				
+				Ok(path)
+			})
+			.for_each(|_| ());
+
+		self.progress_bar.finish();
+
+		Ok(())
+	}
+
+	fn extract_zip(&self, file: File, location: &PathBuf) -> Result<()> {
 		let reader = BufReader::new(file);
 		let mut archive = ZipArchive::new(reader)?;
 		self.progress_bar.set_length(archive.len() as u64);
@@ -83,14 +163,23 @@ impl Zipper {
 
 		self.progress_bar.finish();
 
-		Ok(location)
+		Ok(())
 	}
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum CompressionFormat {
+	Zip,
+	Tar,
+	Directory,
+	Unknown(PathBuf)
 }
 
 #[derive(Debug)]
 pub enum ZipperError {
 	Io(std::io::Error),
 	UnableToConvertDatapack,
+	UnknownFormat(PathBuf)
 }
 
 use std::error;
@@ -101,6 +190,7 @@ impl fmt::Display for ZipperError {
 		match self {
 			ZipperError::Io(error) => write!(f, "{}", error),
 			ZipperError::UnableToConvertDatapack => write!(f, "Unable to convert to datapack"),
+			ZipperError::UnknownFormat(path) => write!(f, "Unknown file format: {}", path.display())
 		}
 	}
 }
@@ -110,6 +200,7 @@ impl error::Error for ZipperError {
 		match *self {
 			ZipperError::Io(ref io_err) => (io_err as &dyn error::Error).description(),
 			ZipperError::UnableToConvertDatapack => "Unable to convert to datapack",
+			ZipperError::UnknownFormat(_) => "Unknown file format"
 		}
 	}
 
@@ -121,13 +212,11 @@ impl error::Error for ZipperError {
 	}
 }
 
-use std::io;
 use std::convert;
+use std::io;
 
-impl convert::From<ZipperError> for io::Error
-{
-    fn from(err: ZipperError) -> io::Error
-    {
-        io::Error::new(io::ErrorKind::Other, err)
-    }
+impl convert::From<ZipperError> for io::Error {
+	fn from(err: ZipperError) -> io::Error {
+		io::Error::new(io::ErrorKind::Other, err)
+	}
 }

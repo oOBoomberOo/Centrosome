@@ -41,30 +41,34 @@ use std::fs;
 trait DataTree<T> where T: Sized + DataTree<Script> {
 	fn create(name: String, child: HashMap<String, T>, data: Option<String>) -> Self where Self: Sized;
 
-	fn generate(physical_path: PathBuf) -> Result<Self>
+	fn generate(physical_path: PathBuf) -> Result<(Self, u64)>
 	where
 		Self: Sized,
 	{
 		let name = get_path_name(&physical_path);
 		if physical_path.is_dir() {
 			let mut child: HashMap<String, T> = HashMap::default();
+			let mut count = 0;
 
 			for entry in physical_path.read_dir()? {
 				if let Ok(entry) = entry {
 					let path = entry.path();
 					let name = get_path_name(&path);
 
-					let result = T::generate(path)?;
+					let (result, child_count) = T::generate(path)?;
 					child.insert(name, result);
+					count += child_count;
 				}
 			}
 
-			Ok(Self::create(name, child, None))
+			let result = Self::create(name, child, None);
+			Ok((result, count))
 		} else {
 			let data = fs::read_to_string(physical_path)?;
 			let child = HashMap::default();
 
-			Ok(Self::create(name, child, Some(data)))
+			let result = Self::create(name, child, Some(data));
+			Ok((result, 1))
 		}
 	}
 }
