@@ -15,7 +15,7 @@ fn create_progress_bar(
 	width: usize,
 ) -> Result<ProgressBar> {
 	let entry_name = entry_name(entry)?.bright_green().bold();
-	let template = format!("[{{elapsed}}] {:<width$} [{{wide_bar:.cyan/white}}] {{pos:>4}}/{{len:4}} {{percent:>3}}% ({{eta:^4}})", entry_name, width = width);
+	let template = format!("[{{elapsed}}] {:<width$} [{{wide_bar:.cyan/white}}] {{bytes:>8}}/{{total_bytes:8}} {{percent:>3}}%", entry_name, width = width);
 	let style = ProgressStyle::default_bar()
 		.template(&template)
 		.progress_chars("#>-");
@@ -25,7 +25,6 @@ fn create_progress_bar(
 
 pub fn create_zipper(
 	entry: &DirEntry,
-	temp_directory: &Path,
 	length: usize,
 	multi_progress: &MultiProgress,
 ) -> Result<Zipper> {
@@ -43,7 +42,6 @@ pub fn create_zipper(
 	}
 
 	let progress_bar = create_progress_bar(&multi_progress, &entry, length)?;
-	let _directory = temp_directory.join(entry_name(entry)?);
 	let zipper = Zipper::new(entry.path(), format).set_progress_bar(progress_bar);
 
 	Ok(zipper)

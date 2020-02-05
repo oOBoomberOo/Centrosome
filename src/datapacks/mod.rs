@@ -34,12 +34,17 @@ trait Setup {
 	fn new(location: impl Into<PathBuf>, data: Option<String>) -> Self;
 }
 
-use crate::utils::{Result, get_path_name};
+use crate::utils::{get_path_name, Result};
 use std::collections::HashMap;
 use std::fs;
 
-trait DataTree<T> where T: Sized + DataTree<Script> {
-	fn create(name: String, child: HashMap<String, T>, data: Option<String>) -> Self where Self: Sized;
+trait DataTree<T>
+where
+	T: Sized + DataTree<Script>,
+{
+	fn create(name: String, child: HashMap<String, T>, data: Option<String>) -> Self
+	where
+		Self: Sized;
 
 	fn generate(physical_path: PathBuf) -> Result<(Self, u64)>
 	where
@@ -71,4 +76,10 @@ trait DataTree<T> where T: Sized + DataTree<Script> {
 			Ok((result, 1))
 		}
 	}
+}
+
+trait Merger {
+	fn merge(&self, other: Self) -> (Self, u64)
+	where
+		Self: Sized;
 }

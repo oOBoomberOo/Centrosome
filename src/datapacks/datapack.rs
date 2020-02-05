@@ -1,22 +1,26 @@
-use super::{Namespace, DataTree};
+use super::{DataTree, Merger, Namespace};
+use crate::utils::{get_path_name, Result};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use crate::utils::{Result, get_path_name};
 
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct Datapack {
 	location: PathBuf,
 	pub name: String,
 	pub namespace: HashMap<String, Namespace>,
-	pub size: u64
+	pub size: u64,
 }
 
 impl Datapack {
-	pub fn new(location: impl Into<PathBuf>) -> Datapack {
+	pub fn new(name: impl Into<String>, location: impl Into<PathBuf>) -> Datapack {
+		let name = name.into();
 		let location = location.into();
-		let name = get_path_name(&location);
-		let namespace = HashMap::default();
-		Datapack { location, name, namespace, size: 0 }
+		Datapack {
+			location,
+			name,
+			namespace: HashMap::default(),
+			size: 0,
+		}
 	}
 
 	pub fn generate(location: impl Into<PathBuf>) -> Result<Datapack> {
@@ -36,9 +40,40 @@ impl Datapack {
 			}
 		}
 
-		let datapack = Datapack { location, name, namespace, size };
+		let datapack = Datapack {
+			location,
+			name,
+			namespace,
+			size,
+		};
 
 		Ok(datapack)
+	}
+
+	pub fn merge(&self, other: Datapack) -> Datapack {
+		let mut result_namespace = self.namespace.clone();
+		let mut size = 0;
+
+		for (key, namespace) in other.namespace {
+			let (namespace, count) = match self.namespace.get(&key) {
+				Some(original) => original.merge(namespace),
+				None => (namespace, 1),
+			};
+
+			size += count;
+			result_namespace.insert(key, namespace);
+		}
+
+		let location = other.location.to_owned();
+		let name = other.name.to_owned();
+		let namespace = result_namespace;
+
+		Datapack {
+			location,
+			namespace,
+			name,
+			size,
+		}
 	}
 }
 
@@ -48,8 +83,7 @@ impl fmt::Debug for Datapack {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		if f.alternate() {
 			write!(f, "{} {:#?}", self.name, self.namespace)
-		}
-		else {
+		} else {
 			write!(f, "{} {:?}", self.name, self.namespace)
 		}
 	}

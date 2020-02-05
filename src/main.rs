@@ -7,18 +7,18 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 
 use dialoguer::theme::ColorfulTheme;
-use dialoguer::Select;
+use dialoguer::{Input, Select};
 
-use std::fs::DirEntry;
-use std::path::{Path};
-use std::thread;
+use std::fs::{remove_dir_all, DirEntry};
 use std::io::{stdout, Write};
+use std::path::Path;
+use std::thread;
 
 mod datapacks;
 mod utils;
 mod zipper;
 
-use datapacks::{Datapack};
+use datapacks::Datapack;
 use utils::{create_zipper, entry_name, get_longest_name_length, read_directory, Result};
 use zipper::Zipper;
 
@@ -54,7 +54,7 @@ fn merge(directory: &Path) -> Result<()> {
 	let setting_up_progress_bar = ProgressBar::new(100)
 		.with_style(
 			ProgressStyle::default_bar()
-				.template("Setting up {spinner} [{wide_bar:.cyan/white}] {pos:.green}/{len:.white} {percent}% ({eta})")
+				.template("[{elapsed}] Setting up... [{wide_bar:.cyan/white}] {pos:.green}/{len:.white} {percent}%")
 				.progress_chars("#>_")
 		);
 
@@ -67,10 +67,16 @@ fn merge(directory: &Path) -> Result<()> {
 		.filter_map(|entry| entry.ok())
 		.collect();
 
-	let _selection = Select::with_theme(&ColorfulTheme::default())
+	let selection = Select::with_theme(&ColorfulTheme::default())
 		.with_prompt("Please choose core datapack")
 		.default(0)
 		.items(&selection_items)
+		.interact()?;
+
+	let merged_datapack_name = Input::<String>::with_theme(&ColorfulTheme::default())
+		.with_prompt("Merged Datapack name")
+		.default("merged_datapack".to_string())
+		.allow_empty(false)
 		.interact()?;
 
 	let progress_bars = MultiProgress::new();
@@ -83,7 +89,7 @@ fn merge(directory: &Path) -> Result<()> {
 	// Create progress bars *before* running .par_iter() because that's when thread blocking happen.
 	let zippers: Vec<Zipper> = result
 		.into_iter()
-		.filter_map(|entry| create_zipper(&entry, &temp_dir, max_length, &progress_bars).ok())
+		.filter_map(|entry| create_zipper(&entry, max_length, &progress_bars).ok())
 		.collect();
 
 	let mut threads = Vec::default();
@@ -95,14 +101,56 @@ fn merge(directory: &Path) -> Result<()> {
 
 	threads.push(progress_bar_thread);
 
-	let result: Vec<Datapack> = zippers.par_iter().filter_map(|zipper| zipper.datapack().ok()).collect();
+	let datapacks: Vec<Datapack> = zippers
+		.par_iter()
+		.filter_map(|zipper| zipper.datapack(&temp_dir).ok())
+		.collect();
 
 	for process in threads {
 		process.join().expect("panic in child thread");
 	}
 
-	// println!("{:#?}", result);
-	println!("Finished encoding {} datapacks.", result.len());
+	println!("Finished interpreting {} datapacks.", datapacks.len());
+
+	let merging_progress_bar = ProgressBar::new(datapacks.len() as u64).with_style(
+		ProgressStyle::default_bar()
+			.template(&format!(
+				"[{{elapsed}}] {0} [{{wide_bar:.cyan/white}}] {{percent}}% {{msg}}",
+				"Merging...".yellow().bold()
+			))
+			.progress_chars("#>_"),
+	);
+
+	let selection = selection_items[selection].to_owned();
+	let core_datapack = datapacks
+		.par_iter()
+		.find_first(|datapack| datapack.name == selection)
+		.unwrap()
+		.to_owned();
+
+	let datapack_dir = temp_dir.join(".merged-datapack");
+	let mut new_datapack = Datapack::new(".merged-datapack", datapack_dir);
+
+	use std::fs;
+	use std::path::PathBuf;
+	let test_result = PathBuf::from("test_result");
+	fs::create_dir_all(&test_result)?;
+
+	for datapack in datapacks {
+		let path = test_result.join(format!("{}.txt", &datapack.name));
+		let content = format!("{:#?}", datapack);
+		fs::write(path, content)?;
+
+		new_datapack = new_datapack.merge(datapack);
+		merging_progress_bar.inc(1);
+	}
+
+	let _merged_datapack = new_datapack.merge(core_datapack);
+
+	remove_dir_all(temp_dir)?;
+
+	merging_progress_bar.finish_with_message("[Finished]");
+	println!("Output: {}", merged_datapack_name);
 
 	Ok(())
 }
