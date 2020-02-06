@@ -1,5 +1,5 @@
 [package]
-name = "datapack-merger"
+name = "centrosome"
 version = "0.1.0"
 authors = ["boomber"]
 edition = "2018"
@@ -9,6 +9,10 @@ repository = "https://github.com/oOBoomberOo/Centrosome"
 readme = "README.md"
 keywords = ["cli", "minecraft", "datapack"]
 categories = ["command-line-utilities"]
+license-file = "LICENSE"
+
+[badges]
+maintenance = { status = "experimental" }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

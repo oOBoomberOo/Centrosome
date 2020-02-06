@@ -74,6 +74,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95e28fa049fda1c330bcf9d723be7663a899c4679724b34c81e9f5a326aab8cd"
 
 [[package]]
+name = "centrosome"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "colored",
+ "dialoguer",
+ "indicatif",
+ "pad",
+ "rayon",
+ "serde",
+ "serde_json",
+ "zip",
+]
+
+[[package]]
 name = "cfg-if"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -186,21 +201,6 @@ dependencies = [
  "autocfg",
  "cfg-if",
  "lazy_static",
-]
-
-[[package]]
-name = "datapack-merger"
-version = "0.1.0"
-dependencies = [
- "clap",
- "colored",
- "dialoguer",
- "indicatif",
- "pad",
- "rayon",
- "serde",
- "serde_json",
- "zip",
 ]
 
 [[package]]
