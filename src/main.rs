@@ -11,7 +11,7 @@ use dialoguer::{Input, Select};
 
 use std::fs::{remove_dir_all, DirEntry};
 use std::io::{stdout, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::thread;
 
 mod datapacks;
@@ -129,11 +129,6 @@ fn merge(directory: &Path) -> Result<()> {
 
 	let datapack_dir = temp_dir.join(".merged-datapack");
 	let mut new_datapack = Datapack::new(".merged-datapack", datapack_dir);
-
-	use std::fs;
-	use std::path::PathBuf;
-	let test_result = PathBuf::from("test_result");
-	fs::create_dir_all(&test_result)?;
 
 	datapacks
 		.into_iter()
