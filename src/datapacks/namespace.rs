@@ -46,7 +46,7 @@ impl Namespace {
 		}
 
 		let namespace = Self::create(name, child);
-		MergeResult::new(namespace, count).into()
+		Ok(MergeResult::new(namespace, count))
 	}
 
 	pub fn reduce(self, location: impl Into<PathBuf>) -> Vec<ScriptFile> {

@@ -45,9 +45,3 @@ impl<T> MergeResult<T> where T: Sized {
 		Ok(MergeResult { script, size, key })
 	}
 }
-
-impl<T> From<MergeResult<T>> for GenerateResult<T> where T: Sized {
-	fn from(merge_result: MergeResult<T>) -> GenerateResult<T> {
-		Ok(merge_result)
-	}
-}

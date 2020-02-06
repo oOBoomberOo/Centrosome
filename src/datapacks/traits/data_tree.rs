@@ -37,7 +37,7 @@ where
 				.sum();
 
 			let script = Self::create(name, child, None, script_type);
-			MergeResult::new(script, size).into()
+			Ok(MergeResult::new(script, size))
 		} else {
 			let extension = physical_path.extension();
 
@@ -49,7 +49,7 @@ where
 			let child = HashMap::default();
 
 			let script = Self::create(name, child, Some(data), script_type);
-			MergeResult::new(script, 1).into()
+			Ok(MergeResult::new(script, 1))
 		}
 	}
 }

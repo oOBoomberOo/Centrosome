@@ -3,6 +3,12 @@ name = "datapack-merger"
 version = "0.1.0"
 authors = ["boomber"]
 edition = "2018"
+description = "A command-line application that merge datapacks into one"
+homepage = "https://github.com/oOBoomberOo/Centrosome"
+repository = "https://github.com/oOBoomberOo/Centrosome"
+readme = "README.md"
+keywords = ["cli", "minecraft", "datapack"]
+categories = ["command-line-utilities"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
