@@ -34,7 +34,7 @@ impl Datapack {
 				let path = entry.path();
 				let name = get_path_name(&path);
 
-				let (result, count) = Namespace::generate(path)?;
+				let (result, count) = Namespace::generate(path).expect("tar.gz crash?");
 				namespace.insert(name, result);
 				size += count;
 			}

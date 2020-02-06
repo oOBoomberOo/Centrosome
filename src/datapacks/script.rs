@@ -1,33 +1,36 @@
-use super::{DataHolder, DataTree, FileType, Merger, Setup};
+use super::{DataHolder, DataTree, FileType, Merger, Setup, EncodingFormat};
 use crate::utils::get_path_name;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-#[derive(Default, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct Script {
 	pub name: String,
 	pub child: HashMap<String, Script>,
-	data: Option<String>,
+	data: Option<Vec<u8>>,
+	format: EncodingFormat
 }
 
 impl Setup for Script {
-	fn new(location: impl Into<PathBuf>, data: Option<String>) -> Script {
+	fn new(location: impl Into<PathBuf>, data: Option<Vec<u8>>) -> Script {
 		let location = location.into();
 		let name = get_path_name(&location);
 		let child = HashMap::default();
-		Script { name, child, data }
+		let data = data.map(Vec::from);
+		let format = EncodingFormat::Utf8;
+		Script { name, child, data, format }
 	}
 }
 
 impl DataHolder for Script {
-	fn data(&self) -> &Option<String> {
+	fn data(&self) -> &Option<Vec<u8>> {
 		&self.data
 	}
 }
 
 impl DataTree<Script> for Script {
-	fn create(name: String, child: HashMap<String, Script>, data: Option<String>) -> Script {
-		Script { name, child, data }
+	fn create(name: String, child: HashMap<String, Script>, data: Option<Vec<u8>>) -> Script {
+		Script { name, child, data, format: EncodingFormat::Utf8 }
 	}
 }
 
@@ -62,8 +65,9 @@ impl Merger for Script {
 				let name = other.name.to_owned();
 				let child = result_child;
 				let data = None;
+				let format = EncodingFormat::Utf8;
 
-				(Script { name, child, data }, counts)
+				(Script { name, child, data, format }, counts)
 			}
 		}
 	}

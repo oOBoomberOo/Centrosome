@@ -8,7 +8,7 @@ pub struct Namespace {
 }
 
 impl DataTree<Script> for Namespace {
-	fn create(name: String, child: HashMap<String, Script>, _data: Option<String>) -> Namespace {
+	fn create(name: String, child: HashMap<String, Script>, _data: Option<Vec<u8>>) -> Namespace {
 		Namespace { name, child }
 	}
 }

@@ -19,7 +19,7 @@ mod utils;
 mod zipper;
 
 use datapacks::Datapack;
-use utils::{create_zipper, entry_name, get_longest_name_length, read_directory, Result};
+use utils::{create_zipper, get_longest_name_length, read_directory, get_path_name, Result};
 use zipper::Zipper;
 
 fn main() {
@@ -62,9 +62,8 @@ fn merge(directory: &Path) -> Result<()> {
 	let result: Vec<DirEntry> = read_directory(directory, setting_up_progress_bar)?;
 
 	let selection_items: Vec<String> = result
-		.iter()
-		.map(entry_name)
-		.filter_map(|entry| entry.ok())
+		.par_iter()
+		.map(|entry| get_path_name(&entry.path()))
 		.collect();
 
 	let selection = Select::with_theme(&ColorfulTheme::default())
@@ -103,6 +102,7 @@ fn merge(directory: &Path) -> Result<()> {
 
 	let datapacks: Vec<Datapack> = zippers
 		.par_iter()
+		// .iter()
 		.filter_map(|zipper| zipper.datapack(&temp_dir).ok())
 		.collect();
 
@@ -137,10 +137,6 @@ fn merge(directory: &Path) -> Result<()> {
 	fs::create_dir_all(&test_result)?;
 
 	for datapack in datapacks {
-		let path = test_result.join(format!("{}.txt", &datapack.name));
-		let content = format!("{:#?}", datapack);
-		fs::write(path, content)?;
-
 		new_datapack = new_datapack.merge(datapack);
 		merging_progress_bar.inc(1);
 	}
