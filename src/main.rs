@@ -124,7 +124,7 @@ fn merge(directory: &Path) -> Result<()> {
 	let core_datapack = datapacks
 		.par_iter()
 		.find_first(|datapack| datapack.name == selection)
-		.expect("TCC is acting up")
+		.expect("Unable to read core datapack")
 		.to_owned();
 
 	let datapack_dir = temp_dir.join(".merged-datapack");
@@ -148,10 +148,20 @@ fn merge(directory: &Path) -> Result<()> {
 	remove_dir_all(temp_dir)?;
 
 	merging_progress_bar.finish_with_message("[Finished]");
-	println!("Output: {}", merged_datapack_name);
 
-	let test_result = PathBuf::from("test_result").join(format!("{}.txt", merged_datapack_name));
-	fs::write(test_result, format!("{:?}", merged_datapack))?;
+	let merged_datapack_path = PathBuf::from(format!("{}.zip", merged_datapack_name));
+	let output_path = directory.join(merged_datapack_path);
+
+	let template = format!("[{{elapsed}}] {} [{{wide_bar:.cyan/white}}] {{percent:>3}}% {{msg}}", "Compiling...".yellow().bold());
+	let compiling_progress_bar = ProgressBar::new(1)
+		.with_style(ProgressStyle::default_bar()
+			.template(&template)
+			.progress_chars("#>_")
+		);
+
+	merged_datapack.compile(&output_path, compiling_progress_bar)?;
+
+	println!("Output merged datapack to: '{}'", output_path.display().to_string().cyan());
 
 	Ok(())
 }

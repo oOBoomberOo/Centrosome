@@ -1,4 +1,4 @@
-use super::{DataTree, Merger, Script, ScriptType, GenerateResult, MergeResult};
+use super::{DataTree, Merger, Script, ScriptType, GenerateResult, MergeResult, ScriptFile};
 use crate::utils::{get_path_name};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -47,6 +47,18 @@ impl Namespace {
 
 		let namespace = Self::create(name, child);
 		MergeResult::new(namespace, count).into()
+	}
+
+	pub fn reduce(self, location: impl Into<PathBuf>) -> Vec<ScriptFile> {
+		let location = location.into();
+		let location = location.join(self.name);
+		let current = ScriptFile::from_namespace(&location);
+		let mut result: Vec<ScriptFile> = self.child
+			.into_iter()
+			.flat_map(|(_, script)| script.reduce(&location).into_iter())
+			.collect();
+		result.push(current);
+		result
 	}
 }
 

@@ -1,4 +1,4 @@
-use super::{DataHolder, DataTree, FileType, Merger, Setup, ScriptType, MergeResult, GenerateResult};
+use super::{DataHolder, DataTree, FileType, Merger, Setup, ScriptType, MergeResult, GenerateResult, ScriptFile};
 use crate::utils::get_path_name;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -10,6 +10,26 @@ pub struct Script {
 	pub child: HashMap<String, Script>,
 	data: Option<Vec<u8>>,
 	script_type: ScriptType
+}
+
+impl Script {
+	pub fn reduce(self, location: &PathBuf) -> Vec<ScriptFile> {
+		let location = location.join(&self.name);
+		match self.file_type() {
+			FileType::File => vec![ScriptFile::new(&self, &location)],
+			FileType::Folder => {
+				let current = ScriptFile::new(&self, &location);
+				let mut result: Vec<ScriptFile> = self.child
+					.into_iter()
+					.flat_map(|(_, script)| script.reduce(&location)
+					.into_iter())
+					.collect();
+				result.push(current);
+
+				result
+			}
+		}
+	}
 }
 
 impl Setup for Script {

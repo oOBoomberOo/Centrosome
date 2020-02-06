@@ -6,6 +6,7 @@ use std::error::Error;
 use std::ffi::OsStr;
 use std::fs::{DirEntry};
 use std::path::{Path, PathBuf};
+use zip::CompressionMethod;
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -116,6 +117,18 @@ pub fn get_path_name(path: &PathBuf) -> String {
 		.to_str()
 		.unwrap_or_default()
 		.to_string()
+}
+
+pub fn get_compression_method() -> CompressionMethod {
+	if cfg!(feature = "bzip2") {
+		CompressionMethod::Bzip2
+	}
+	else if cfg!(feature = "deflate") {
+		CompressionMethod::Deflated
+	}
+	else {
+		CompressionMethod::Stored
+	}
 }
 
 #[cfg(test)]
