@@ -147,6 +147,6 @@ mod tests {
 			"Johnny Joestar",
 			"Josuke Higashikata"
 		].iter().map(|jojo| String::from(*jojo)).collect();
-		assert_eq!(get_longest_name_length(jojos.as_slice()), 17);
+		assert_eq!(get_longest_name_length(jojos.as_slice()), 18);
 	}
 }
