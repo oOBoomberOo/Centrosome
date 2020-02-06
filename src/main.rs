@@ -102,14 +102,13 @@ fn merge(directory: &Path) -> Result<()> {
 
 	let datapacks: Vec<Datapack> = zippers
 		.par_iter()
-		// .iter()
 		.filter_map(|zipper| zipper.datapack(&temp_dir).ok())
 		.collect();
 
 	for process in threads {
 		process.join().expect("panic in child thread");
 	}
-
+	
 	println!("Finished interpreting {} datapacks.", datapacks.len());
 
 	let merging_progress_bar = ProgressBar::new(datapacks.len() as u64).with_style(
@@ -125,7 +124,7 @@ fn merge(directory: &Path) -> Result<()> {
 	let core_datapack = datapacks
 		.par_iter()
 		.find_first(|datapack| datapack.name == selection)
-		.unwrap()
+		.expect("TCC is acting up")
 		.to_owned();
 
 	let datapack_dir = temp_dir.join(".merged-datapack");
@@ -136,17 +135,23 @@ fn merge(directory: &Path) -> Result<()> {
 	let test_result = PathBuf::from("test_result");
 	fs::create_dir_all(&test_result)?;
 
-	for datapack in datapacks {
-		new_datapack = new_datapack.merge(datapack);
-		merging_progress_bar.inc(1);
-	}
+	datapacks
+		.into_iter()
+		.filter(|datapack| datapack.name != core_datapack.name)
+		.for_each(|datapack| {
+			new_datapack = new_datapack.merge(datapack);
+			merging_progress_bar.inc(1);
+		});
 
-	let _merged_datapack = new_datapack.merge(core_datapack);
+	let merged_datapack = new_datapack.merge(core_datapack);
 
 	remove_dir_all(temp_dir)?;
 
 	merging_progress_bar.finish_with_message("[Finished]");
 	println!("Output: {}", merged_datapack_name);
+
+	let test_result = PathBuf::from("test_result").join(format!("{}.txt", merged_datapack_name));
+	fs::write(test_result, format!("{:?}", merged_datapack))?;
 
 	Ok(())
 }

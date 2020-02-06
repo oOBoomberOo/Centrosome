@@ -1,11 +1,13 @@
-use super::{DataTree, Merger, Namespace};
+use super::{Merger, Namespace, MergeResult};
 use crate::utils::{get_path_name, Result};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::fs;
 
 #[derive(Default, Clone, PartialEq, Eq)]
 pub struct Datapack {
 	location: PathBuf,
+	meta: Vec<u8>,
 	pub name: String,
 	pub namespace: HashMap<String, Namespace>,
 	pub size: u64,
@@ -15,7 +17,9 @@ impl Datapack {
 	pub fn new(name: impl Into<String>, location: impl Into<PathBuf>) -> Datapack {
 		let name = name.into();
 		let location = location.into();
+		let meta = Vec::default();
 		Datapack {
+			meta,
 			location,
 			name,
 			namespace: HashMap::default(),
@@ -34,13 +38,18 @@ impl Datapack {
 				let path = entry.path();
 				let name = get_path_name(&path);
 
-				let (result, count) = Namespace::generate(path).expect("tar.gz crash?");
-				namespace.insert(name, result);
-				size += count;
+				if path.is_dir() {
+					let result = Namespace::generate(path).expect("Unable to generate namespace");
+					namespace.insert(name, result.script);
+					size += result.size;
+				}
 			}
 		}
 
+		let meta = fs::read(location.join("pack.mcmeta"))?;
+
 		let datapack = Datapack {
+			meta,
 			location,
 			name,
 			namespace,
@@ -51,24 +60,26 @@ impl Datapack {
 	}
 
 	pub fn merge(&self, other: Datapack) -> Datapack {
-		let mut result_namespace = self.namespace.clone();
-		let mut size = 0;
+		let mut namespace = self.namespace.clone();
 
-		for (key, namespace) in other.namespace {
-			let (namespace, count) = match self.namespace.get(&key) {
-				Some(original) => original.merge(namespace),
-				None => (namespace, 1),
-			};
-
-			size += count;
-			result_namespace.insert(key, namespace);
-		}
+		let size = other.namespace
+			.into_iter()
+			.filter_map(|(key, namespace)| match self.namespace.get(&key) {
+				Some(original) => original.merge(namespace, &key).ok(),
+				None => MergeResult::with_key(namespace, 1, &key)
+			})
+			.map(|merge_result| {
+				namespace.insert(merge_result.key, merge_result.script);
+				merge_result.size
+			})
+			.sum();
 
 		let location = other.location.to_owned();
 		let name = other.name.to_owned();
-		let namespace = result_namespace;
+		let meta = other.meta;
 
 		Datapack {
+			meta,
 			location,
 			namespace,
 			name,
@@ -89,6 +100,12 @@ impl fmt::Debug for Datapack {
 	}
 }
 
+impl fmt::Display for Datapack {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{}", self.name)
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::{Datapack, HashMap, PathBuf};
@@ -97,6 +114,7 @@ mod tests {
 	fn init_datapack() {
 		let value = Datapack::new("Senku", "kingdom/of/science.txt");
 		let expect = Datapack {
+			meta: Vec::default(),
 			location: PathBuf::from("kingdom/of/science.txt"),
 			name: "Senku".to_string(),
 			namespace: HashMap::default(),

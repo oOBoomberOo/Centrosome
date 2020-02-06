@@ -45,14 +45,14 @@ impl Zipper {
 
 	pub fn datapack(&self, temp_dir: &PathBuf) -> Result<Datapack> {
 		if self.reader_location.is_dir() {
-			let result = Datapack::generate(&self.reader_location).unwrap_or_default();
+			let result = Datapack::generate(&self.reader_location)?;
 			self.progress_bar.set_length(result.size);
 			self.progress_bar.finish_and_clear();
 
 			Ok(result)
 		} else if let Ok(extract_location) = self.extract(&temp_dir) {
-			let result = Datapack::generate(&extract_location).unwrap_or_default();
-			remove_dir_all(extract_location).unwrap();
+			let result = Datapack::generate(&extract_location)?;
+			remove_dir_all(extract_location)?;
 
 			Ok(result)
 		} else {
