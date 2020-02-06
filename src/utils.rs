@@ -117,3 +117,36 @@ pub fn get_path_name(path: &PathBuf) -> String {
 		.unwrap_or_default()
 		.to_string()
 }
+
+#[cfg(test)]
+mod tests {
+	use std::path::PathBuf;
+	use super::{get_path_name, get_longest_name_length};
+
+	#[test]
+	fn test_dio_file_path() {
+		let value = PathBuf::from("/oh/you/are/approaching/me.question");
+		assert_eq!(get_path_name(&value), String::from("me.question"))
+	}
+
+	#[test]
+	fn test_jotaro_dir_path() {
+		let value = PathBuf::from("/i/cant/beat/the/shit/out/of/you/with/out/getting/closer");
+		assert_eq!(get_path_name(&value), String::from("closer"))
+	}
+
+	#[test]
+	fn get_longest_jojo_name() {
+		let jojos: Vec<String> = vec![
+			"Jonathan Joestar",
+			"Joseph Joestar",
+			"Jotaro Kujo",
+			"Josuke Higashikata",
+			"Giorno Giovanna",
+			"Jolyne Cujoh",
+			"Johnny Joestar",
+			"Josuke Higashikata"
+		].iter().map(|jojo| String::from(*jojo)).collect();
+		assert_eq!(get_longest_name_length(jojos.as_slice()), 18);
+	}
+}

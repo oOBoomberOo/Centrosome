@@ -47,7 +47,7 @@ trait DataTree<T>
 where
 	T: Sized + DataTree<Script>,
 {
-	fn create(name: String, child: HashMap<String, T>, data: Option<Vec<u8>>) -> Self
+	fn create(name: impl Into<String>, child: HashMap<String, T>, data: Option<Vec<u8>>) -> Self
 	where
 		Self: Sized;
 

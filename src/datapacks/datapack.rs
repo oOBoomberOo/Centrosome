@@ -88,3 +88,21 @@ impl fmt::Debug for Datapack {
 		}
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use super::{Datapack, HashMap, PathBuf};
+
+	#[test]
+	fn init_datapack() {
+		let value = Datapack::new("Senku", "kingdom/of/science.txt");
+		let expect = Datapack {
+			location: PathBuf::from("kingdom/of/science.txt"),
+			name: "Senku".to_string(),
+			namespace: HashMap::default(),
+			size: 0
+		};
+
+		assert_eq!(value, expect);
+	}
+}

@@ -97,3 +97,26 @@ impl Zipper {
 		Ok(location)
 	}
 }
+
+impl PartialEq for Zipper {
+	fn eq(&self, other: &Zipper) -> bool {
+		self.reader_location == other.reader_location
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use std::path::PathBuf;
+	use super::{Zipper, ProgressBar};
+
+	#[test]
+	fn init_zipper() {
+		assert_eq!(
+			Zipper::new(PathBuf::from("ohayou_sekai.txt")),
+			Zipper {
+				reader_location: PathBuf::from("ohayou_sekai.txt"),
+				progress_bar: ProgressBar::hidden()
+			}
+		);
+	}
+}

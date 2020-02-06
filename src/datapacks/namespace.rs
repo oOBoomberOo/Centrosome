@@ -8,7 +8,8 @@ pub struct Namespace {
 }
 
 impl DataTree<Script> for Namespace {
-	fn create(name: String, child: HashMap<String, Script>, _data: Option<Vec<u8>>) -> Namespace {
+	fn create(name: impl Into<String>, child: HashMap<String, Script>, _data: Option<Vec<u8>>) -> Namespace {
+		let name = name.into();
 		Namespace { name, child }
 	}
 }
@@ -32,5 +33,21 @@ impl Merger for Namespace {
 		let child = result_child;
 
 		(Namespace { name, child }, counts)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::{Namespace, DataTree, HashMap};
+
+	#[test]
+	fn init_namespace() {
+		let value = Namespace::create("Megumin", HashMap::default(), None);
+		let expect = Namespace {
+			name: "Megumin".to_string(),
+			child: HashMap::default()
+		};
+
+		assert_eq!(value, expect);
 	}
 }

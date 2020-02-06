@@ -17,7 +17,7 @@ impl Setup for Script {
 		let name = get_path_name(&location);
 		let child = HashMap::default();
 		let data = data.map(Vec::from);
-		let format = EncodingFormat::Utf8;
+		let format = EncodingFormat::default();
 		Script { name, child, data, format }
 	}
 }
@@ -29,8 +29,9 @@ impl DataHolder for Script {
 }
 
 impl DataTree<Script> for Script {
-	fn create(name: String, child: HashMap<String, Script>, data: Option<Vec<u8>>) -> Script {
-		Script { name, child, data, format: EncodingFormat::Utf8 }
+	fn create(name: impl Into<String>, child: HashMap<String, Script>, data: Option<Vec<u8>>) -> Script {
+		let name = name.into();
+		Script { name, child, data, format: EncodingFormat::default() }
 	}
 }
 
@@ -70,5 +71,36 @@ impl Merger for Script {
 				(Script { name, child, data, format }, counts)
 			}
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::{Script, Setup, DataTree, HashMap, EncodingFormat};
+
+	#[test]
+	fn init_script() {
+		let value = Script::new("bofuri/maple.syrup", None);
+		let expect = Script {
+			name: "maple.syrup".to_string(),
+			child: HashMap::default(),
+			data: None,
+			format: EncodingFormat::default()
+		};
+
+		assert_eq!(value, expect);
+	}
+
+	#[test]
+	fn create_script() {
+		let value = Script::create("Tanya von Degurechaff", HashMap::default(), None);
+		let expect = Script {
+			name: "Tanya von Degurechaff".to_string(),
+			child: HashMap::default(),
+			data: None,
+			format: EncodingFormat::default()
+		};
+
+		assert_eq!(value, expect);
 	}
 }
