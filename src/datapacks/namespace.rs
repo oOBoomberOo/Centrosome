@@ -18,7 +18,7 @@ impl Namespace {
 	pub fn generate(physical_path: PathBuf) -> GenerateResult<Namespace> {
 		let name = get_path_name(&physical_path);
 		let mut child: HashMap<String, Script> = HashMap::default();
-		let mut count = 0;
+		let mut size = 0;
 
 		for entry in physical_path.read_dir()? {
 			if let Ok(entry) = entry {
@@ -38,7 +38,7 @@ impl Namespace {
 
 				if let Ok(result) = Script::generate(&path, script_type) {
 					child.insert(name, result.script);
-					count += result.size;
+					size += result.size;
 				} else {
 					eprintln!("An unknown error occurs, Debug Message: '{}'", path.display());
 				}
@@ -46,7 +46,7 @@ impl Namespace {
 		}
 
 		let namespace = Self::create(name, child);
-		Ok(MergeResult::new(namespace, count))
+		Ok(MergeResult::new(namespace, size))
 	}
 
 	pub fn reduce(self, location: impl Into<PathBuf>) -> Vec<ScriptFile> {

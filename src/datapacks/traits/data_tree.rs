@@ -46,10 +46,11 @@ where
 			}
 
 			let data = fs::read(physical_path)?;
+			let size = data.len() as u64;
 			let child = HashMap::default();
 
 			let script = Self::create(name, child, Some(data), script_type);
-			Ok(MergeResult::new(script, 1))
+			Ok(MergeResult::new(script, size))
 		}
 	}
 }

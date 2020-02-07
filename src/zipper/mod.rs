@@ -60,7 +60,7 @@ impl Zipper {
 		if self.reader_location.is_dir() {
 			let result = Datapack::generate(&self.reader_location)?;
 			self.progress_bar.set_length(result.size);
-			self.progress_bar.finish_and_clear();
+			self.progress_bar.finish();
 
 			Ok(result)
 		} else if let Ok(extract_location) = self.extract(&temp_dir) {
