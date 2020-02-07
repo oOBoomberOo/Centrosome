@@ -1,4 +1,4 @@
-# Oxidized Centrosome ![Rust](https://github.com/oOBoomberOo/Centrosome/workflows/Rust/badge.svg)
+# Oxidized Centrosome ![Rust](https://github.com/oOBoomberOo/Centrosome/workflows/Rust/badge.svg) ![Crates.io](https://img.shields.io/crates/v/centrosome?logo=Centrosome)
 Oxidized Centrosome is a fork of "Centrosome by Cocoon" rewritten in Rust. (Yes, I know, Oxidized Centrosome make no sense)
 
 ## Getting Start
