@@ -1,6 +1,6 @@
 [package]
 name = "centrosome"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["boomber"]
 edition = "2018"
 description = "A command-line application that merge datapacks into one"
