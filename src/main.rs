@@ -10,7 +10,6 @@ use dialoguer::theme::ColorfulTheme;
 use dialoguer::{Input, Select};
 
 use std::fs::{remove_dir_all, DirEntry};
-use std::io::{stdout, Write};
 use std::path::{Path, PathBuf};
 use std::thread;
 
@@ -26,7 +25,7 @@ fn main() {
 	let yaml = load_yaml!("../resource/cli.yml");
 	let matches = App::from_yaml(yaml).get_matches();
 
-	let directory = matches.value_of("directory").unwrap();
+	let directory = matches.value_of("directory").expect("Invalid directory name");
 	let directory = Path::new(directory);
 
 	if directory.exists() {
@@ -48,6 +47,21 @@ fn main() {
 	}
 }
 
+/**
+ * Handling all the command interaction with user
+ * 
+ * The program work as follow:
+ * 1) Read directory and identify datapack-like files
+ * 2) Ask user to select 'core datapack'
+ * 3) Get the longest name from all of the datapacks (will be used to padded the progress bar to be equal length)
+ * 4) Create 'Zipper' for all datapack. In this step progress bar for "extracting" datapack will also be created as well
+ * 5) Extract all zipped datapacks
+ * 6) Interpreting all datapacks into 'Datapack' struct
+ * 7) Merge every datapacks except 'core datapack'
+ * 8) Merge 'core datapack'
+ * 9) Remove all files inside temp directory used for extracting zip files
+ * 10) Compress the merged datapack
+ */
 fn merge(directory: &Path) -> Result<()> {
 	let temp_dir = std::env::temp_dir().join("datapack-merger");
 
@@ -81,9 +95,6 @@ fn merge(directory: &Path) -> Result<()> {
 	let progress_bars = MultiProgress::new();
 
 	let max_length = get_longest_name_length(selection_items.as_slice());
-
-	// Flush first because loading bar seem to disappear when run in short enough time
-	stdout().flush()?;
 
 	// Create progress bars *before* running .par_iter() because that's when thread blocking happen.
 	let zippers: Vec<Zipper> = result

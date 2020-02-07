@@ -6,11 +6,11 @@ use std::path::PathBuf;
 #[derive(Default, Debug, Clone, Eq, PartialEq)]
 pub struct Namespace {
 	pub name: String,
-	child: HashMap<String, Script>,
+	pub child: HashMap<String, Script>,
 }
 
 impl Namespace {
-	fn create(name: impl Into<String>, child: HashMap<String, Script>) -> Namespace {
+	pub fn create(name: impl Into<String>, child: HashMap<String, Script>) -> Namespace {
 		let name = name.into();
 		Namespace { name, child }
 	}

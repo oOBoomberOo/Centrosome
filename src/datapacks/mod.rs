@@ -14,7 +14,7 @@ use script_type::ScriptType;
 use traits::{DataHolder, DataTree, Setup, Merger};
 use script_file::ScriptFile;
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum FileType {
 	File,
 	Folder,

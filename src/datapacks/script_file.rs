@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use super::{FileType, Script, DataHolder};
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ScriptFile {
 	pub location: PathBuf,
 	pub data: Vec<u8>,

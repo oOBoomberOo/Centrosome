@@ -17,7 +17,12 @@ pub struct Zipper {
 }
 
 impl Zipper {
-	pub fn new(reader_location: PathBuf) -> Zipper {
+	/**
+ * Creating new Zipper  
+ * Progress bar will be hidden if created by this function
+*/
+	pub fn new(reader_location: impl Into<PathBuf>) -> Zipper {
+		let reader_location = reader_location.into();
 		let progress_bar = ProgressBar::hidden();
 		Zipper {
 			reader_location,
@@ -30,6 +35,11 @@ impl Zipper {
 		self
 	}
 
+	/**
+ * Peak metadata of `path`  
+ * Will return `(is_file, is_directory)` booleans
+ * TODO: Refactor this
+ */
 	pub fn peak(&self, path: &str) -> (bool, bool) {
 		let reader = self.reader_location.to_owned();
 		if let Ok(file) = File::open(reader) {
@@ -43,6 +53,9 @@ impl Zipper {
 		(false, false)
 	}
 
+	/**
+ * Encoding datapack into `Datapack` struct, Will extract file if needed.
+ */
 	pub fn datapack(&self, temp_dir: &PathBuf) -> Result<Datapack> {
 		if self.reader_location.is_dir() {
 			let result = Datapack::generate(&self.reader_location)?;
@@ -61,6 +74,9 @@ impl Zipper {
 		}
 	}
 
+	/**
+ * Handling extraction of datapack file
+ */
 	pub fn extract(&self, temp_dir: &PathBuf) -> Result<PathBuf> {
 		let node = &self.reader_location;
 		let name = get_path_name(&node);
@@ -112,7 +128,7 @@ mod tests {
 	#[test]
 	fn init_zipper() {
 		assert_eq!(
-			Zipper::new(PathBuf::from("ohayou_sekai.txt")),
+			Zipper::new("ohayou_sekai.txt"),
 			Zipper {
 				reader_location: PathBuf::from("ohayou_sekai.txt"),
 				progress_bar: ProgressBar::hidden()

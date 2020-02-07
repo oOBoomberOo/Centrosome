@@ -156,7 +156,7 @@ impl fmt::Display for Datapack {
 
 #[cfg(test)]
 mod tests {
-	use super::{Datapack, HashMap, PathBuf};
+	use super::{Datapack, HashMap, PathBuf, Namespace};
 
 	#[test]
 	fn init_datapack() {
@@ -170,5 +170,24 @@ mod tests {
 		};
 
 		assert_eq!(value, expect);
+	}
+
+	#[test]
+	fn reduce_simple_datapack() {
+		let mut datapack = Datapack::new("Hai Kazuma Desu", "konosuba.mov");
+		let boomber = Namespace::create("boomber", HashMap::default());
+		datapack.namespace.insert("boomber".to_string(), boomber);
+
+		let value = datapack.reduce("/").len();
+		let expect = 2;
+		assert_eq!(value, expect);
+	}
+
+	#[test]
+	fn reduce_complex_datapack() {
+		let datapack = Datapack::generate("test/reduce_complex_datapack").unwrap();
+		let result = datapack.reduce("/").len();
+		let expect = 40;
+		assert_eq!(result, expect);
 	}
 }
