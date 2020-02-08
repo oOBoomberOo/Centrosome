@@ -1,47 +1,130 @@
+mod data_structure;
 mod datapack;
 mod namespace;
 mod script;
-mod script_type;
-mod data_structure;
-mod script_file;
 
-mod traits;
-
+use data_structure::Tag;
 pub use datapack::Datapack;
 use namespace::Namespace;
 use script::Script;
-use script_type::ScriptType;
-use traits::{DataHolder, DataTree, Setup, Merger};
-use script_file::ScriptFile;
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+type GeneratedResult<T> = Result<(T, u64), TreeError>;
+type MergedResult<T> = Result<T, TreeError>;
+type CompiledResult<T> = Result<T, TreeError>;
+
+use std::fs::{DirEntry, File};
+use zip::write::FileOptions;
+use zip::ZipWriter;
+/// A trait for handling recursive structure of file system
+trait DataTree {
+	/// Walk through files and directories and return encoded version of it
+	///
+	/// `event` will run when it found a file and will have that file's size as argument
+	fn generate(
+		entry: DirEntry,
+		kind: ScriptKind,
+		event: impl Fn(u64) + Copy,
+	) -> GeneratedResult<Self>
+	where
+		Self: Sized;
+	/// Merge two files or directories together
+	///
+	/// `event` will run when it found a file and will have that file's size as argument
+	fn merge(&self, other: Self, event: impl Fn(u64) + Copy) -> MergedResult<Self>
+	where
+		Self: Sized;
+	/// Compile the data tree down into a single zip file
+	///
+	/// `event` will run when it found a file and will have that file's size as argument
+	fn compile(
+		&self,
+		path: impl Into<PathBuf>,
+		zip: &mut ZipWriter<File>,
+		options: &FileOptions,
+		event: impl Fn(u64) + Copy,
+	) -> CompiledResult<()>;
+}
+
+/// Possible type of file inside `Namespace`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ScriptKind {
+	Tag,
+	Generic,
+	None,
+}
+
+impl Default for ScriptKind {
+	fn default() -> ScriptKind {
+		ScriptKind::None
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FileType {
-	File,
-	Folder,
+	File(Vec<u8>),
+	Directory,
 }
 
-use crate::utils::Result;
-type GenerateResult<T> = Result<MergeResult<T>>;
+use colored::*;
+use std::io::Error;
+use std::path::PathBuf;
 
-#[derive(Debug, Clone)]
-pub struct MergeResult<T> {
-	pub script: T,
-	pub size: u64,
-	pub key: String
+/// Error struct for `DataTree` trait
+#[derive(Debug)]
+pub enum TreeError {
+	Io(Error),
+	Json(serde_json::Error, String),
+	ZipError(zip::result::ZipError),
+	FileInNamespace(PathBuf),
+	FileInDatapack(PathBuf),
+	UnknownFormat(String),
+	MismatchType(String, String),
 }
 
-impl<T> MergeResult<T> where T: Sized {
-	fn new(script: T, size: u64) -> MergeResult<T> {
-		MergeResult { script, size, key: String::default() }
+use std::fmt;
+impl fmt::Display for TreeError {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			TreeError::Io(error) => write!(f, "{}", error),
+			TreeError::Json(error, name) => write!(f, "{} in '{}'", error, name),
+			TreeError::ZipError(error) => write!(f, "{}", error),
+			TreeError::FileInNamespace(source) => write!(
+				f,
+				"'{}' is inside namespace directory. Skipping...",
+				source.display().to_string().cyan()
+			),
+			TreeError::FileInDatapack(source) => write!(
+				f,
+				"'{}' is inside datapack directory. Skipping...",
+				source.display().to_string().cyan()
+			),
+			TreeError::UnknownFormat(source) => {
+				write!(f, "'{}' contained unknown format", source.cyan())
+			}
+			TreeError::MismatchType(source, other) => write!(
+				f,
+				"'{}' and '{}' somehow have different type in merging progress",
+				source.cyan(),
+				other.cyan()
+			),
+		}
 	}
+}
 
-	fn with_key(script: T, size: u64, key: impl Into<String>) -> Option<MergeResult<T>> {
-		let key = key.into();
-		Some(MergeResult { script, size, key })
+impl From<Error> for TreeError {
+	fn from(error: Error) -> TreeError {
+		TreeError::Io(error)
 	}
-	
-	fn merge(script: T, size: u64, key: impl Into<String>) -> GenerateResult<T> {
-		let key = key.into();
-		Ok(MergeResult { script, size, key })
+}
+
+impl From<(serde_json::Error, String)> for TreeError {
+	fn from((error, name): (serde_json::Error, String)) -> TreeError {
+		TreeError::Json(error, name)
+	}
+}
+
+impl From<zip::result::ZipError> for TreeError {
+	fn from(error: zip::result::ZipError) -> TreeError {
+		TreeError::ZipError(error)
 	}
 }

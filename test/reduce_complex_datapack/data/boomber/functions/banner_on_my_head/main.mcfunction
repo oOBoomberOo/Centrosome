@@ -1,1 +1,0 @@
-execute as @a[tag=!global.ignore] at @s run function boomber:banner_on_my_head/player/main

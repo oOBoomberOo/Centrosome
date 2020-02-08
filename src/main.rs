@@ -3,29 +3,32 @@ extern crate clap;
 
 use clap::App;
 use colored::*;
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::{Input, Select};
 
-use std::fs::{remove_dir_all, DirEntry};
+use std::io;
 use std::path::{Path, PathBuf};
-use std::thread;
 
+mod datapack_loader;
 mod datapacks;
 mod utils;
-mod zipper;
 
+use datapack_loader::DatapackLoader;
 use datapacks::Datapack;
-use utils::{create_zipper, get_longest_name_length, read_directory, get_path_name, Result};
-use zipper::Zipper;
+use utils::{
+	get_compression_method, get_datapacks, os_str_to_string, DatapackIterator, MergeError,
+};
 
 fn main() {
 	let yaml = load_yaml!("../resource/cli.yml");
 	let matches = App::from_yaml(yaml).get_matches();
 
-	let directory = matches.value_of("directory").expect("Invalid directory name");
+	let directory = matches
+		.value_of("directory")
+		.expect("Invalid directory name");
 	let directory = Path::new(directory);
 
 	if directory.exists() {
@@ -35,139 +38,143 @@ fn main() {
 			}
 		} else {
 			eprintln!(
-				"'{}' is not a directory",
-				format!("{}", directory.display()).cyan()
+				"'{}' is not a directory!",
+				directory.display().to_string().cyan()
 			);
 		}
 	} else {
 		eprintln!(
-			"'{}' does not exist.",
-			format!("{}", directory.display()).cyan()
+			"'{}' {}",
+			directory.display().to_string().cyan(),
+			"does not exists.".red()
 		);
 	}
 }
 
-/**
- * Handling all the command interaction with user
- * 
- * The program work as follow:
- * 1) Read directory and identify datapack-like files
- * 2) Ask user to select 'core datapack'
- * 3) Get the longest name from all of the datapacks (will be used to padded the progress bar to be equal length)
- * 4) Create 'Zipper' for all datapack. In this step progress bar for "extracting" datapack will also be created as well
- * 5) Extract all zipped datapacks
- * 6) Interpreting all datapacks into 'Datapack' struct
- * 7) Merge every datapacks except 'core datapack'
- * 8) Merge 'core datapack'
- * 9) Remove all files inside temp directory used for extracting zip files
- * 10) Compress the merged datapack
- */
-fn merge(directory: &Path) -> Result<()> {
-	let temp_dir = std::env::temp_dir().join("datapack-merger");
+fn merge(directory: &Path) -> Result<(), MergeError> {
+	let datapack_entries = get_datapacks(directory)?;
+	let (selection_items, datapack_entries) = get_selection_items(datapack_entries);
 
-	let setting_up_progress_bar = ProgressBar::new(100)
-		.with_style(
-			ProgressStyle::default_bar()
-				.template("[{elapsed}] Setting up... [{wide_bar:.cyan/white}] {pos:.green}/{len:.white} {percent}%")
-				.progress_chars("#>_")
-		);
+	let selection = match ask_core_datapack(&selection_items)? {
+		Some(x) => x,
+		None => return Err(MergeError::Cancel),
+	};
+	let datapack_name = ask_merged_datapack_name()?;
 
-	// Return all zip files in `directory`
-	let result: Vec<DirEntry> = read_directory(directory, setting_up_progress_bar)?;
+	let selection = &selection_items[selection];
 
-	let selection_items: Vec<String> = result
-		.par_iter()
-		.map(|entry| get_path_name(&entry.path()))
-		.collect();
+	let (core_datapack, core_size) = get_core_datapack(&selection, &datapack_entries, |_| {})?;
+	let (datapacks, sizes): (Vec<Datapack>, Vec<u64>) =
+		get_other_datapack(&selection, &datapack_entries, |_| {});
+	let total_size = core_size + sizes.iter().sum::<u64>();
 
-	let selection = Select::with_theme(&ColorfulTheme::default())
+	let temp_dir = tempfile::tempdir()?;
+	let mut output_datapack = Datapack::from(temp_dir.path());
+
+	for datapack in datapacks {
+		if &datapack.name != selection {
+			output_datapack = output_datapack.merge(datapack, |_| {})?;
+		}
+	}
+
+	output_datapack = output_datapack.merge(core_datapack, |_| {})?;
+
+	let output_path = get_output_path(&directory, &datapack_name);
+
+	let compiling_bar = prepare_compiling_progress_bar(total_size);
+	let options = prepare_zip_options();
+
+	output_datapack.compile(&output_path, &options, |delta| compiling_bar.inc(delta))?;
+
+	compiling_bar.finish();
+
+	println!(
+		"Compiled datapack to: '{}'",
+		output_path.display().to_string().cyan()
+	);
+
+	Ok(())
+}
+
+fn ask_core_datapack(selection_items: &[String]) -> io::Result<Option<usize>> {
+	Select::with_theme(&ColorfulTheme::default())
 		.with_prompt("Please choose core datapack")
 		.default(0)
 		.items(&selection_items)
-		.interact()?;
+		.paged(true)
+		.interact_opt()
+}
 
-	let merged_datapack_name = Input::<String>::with_theme(&ColorfulTheme::default())
-		.with_prompt("Merged Datapack name")
+fn ask_merged_datapack_name() -> io::Result<String> {
+	Input::with_theme(&ColorfulTheme::default())
+		.with_prompt("Merged datapack name")
 		.default("merged_datapack".to_string())
 		.allow_empty(false)
-		.interact()?;
+		.show_default(true)
+		.interact()
+}
 
-	let progress_bars = MultiProgress::new();
-
-	let max_length = get_longest_name_length(selection_items.as_slice());
-
-	// Create progress bars *before* running .par_iter() because that's when thread blocking happen.
-	let zippers: Vec<Zipper> = result
-		.into_iter()
-		.filter_map(|entry| create_zipper(&entry, max_length, &progress_bars).ok())
-		.collect();
-
-	let mut threads = Vec::default();
-
-	// MultiProgress have to be run in another thread so that .par_iter() won't block each other process.
-	let progress_bar_thread = thread::spawn(move || {
-		progress_bars.join().unwrap();
-	});
-
-	threads.push(progress_bar_thread);
-
-	let datapacks: Vec<Datapack> = zippers
-		.par_iter()
-		.filter_map(|zipper| zipper.datapack(&temp_dir).ok())
-		.collect();
-
-	for process in threads {
-		process.join().expect("panic in child thread");
-	}
-	
-	println!("Finished interpreting {} datapacks.", datapacks.len());
-
-	let merging_progress_bar = ProgressBar::new(datapacks.len() as u64).with_style(
-		ProgressStyle::default_bar()
-			.template(&format!(
-				"[{{elapsed}}] {0} [{{wide_bar:.cyan/white}}] {{percent}}% {{msg}}",
-				"Merging...".yellow().bold()
-			))
-			.progress_chars("#>_"),
+fn prepare_compiling_progress_bar(size: u64) -> ProgressBar {
+	let template = format!(
+		"[{{elapsed}}] {} [{{wide_bar:.white}}] {{bytes}}/{{total_bytes}}",
+		"Compiling".yellow().bold()
 	);
+	let style = ProgressStyle::default_bar().template(&template);
+	ProgressBar::new(size).with_style(style)
+}
 
-	let selection = selection_items[selection].to_owned();
-	let core_datapack = datapacks
-		.par_iter()
-		.find_first(|datapack| datapack.name == selection)
-		.expect("Unable to read core datapack")
-		.to_owned();
+use zip::write::FileOptions;
+fn prepare_zip_options() -> FileOptions {
+	FileOptions::default()
+		.compression_method(get_compression_method())
+		.unix_permissions(0o775)
+}
 
-	let datapack_dir = temp_dir.join(".merged-datapack");
-	let mut new_datapack = Datapack::new(".merged-datapack", datapack_dir);
+fn get_selection_items(datapack_entries: DatapackIterator) -> (Vec<String>, Vec<DatapackLoader>) {
+	datapack_entries
+		.map(|entry| -> (String, DatapackLoader) {
+			let name = os_str_to_string(&entry.file_name());
+			let loader = DatapackLoader::new(entry.path()).unwrap();
+			(name, loader)
+		})
+		.unzip()
+}
 
+fn get_core_datapack(
+	name: &str,
+	datapacks: &[DatapackLoader],
+	event: impl Fn(u64) + Sync + Send + Copy,
+) -> Result<(Datapack, u64), MergeError> {
 	datapacks
-		.into_iter()
-		.filter(|datapack| datapack.name != core_datapack.name)
-		.for_each(|datapack| {
-			new_datapack = new_datapack.merge(datapack);
-			merging_progress_bar.inc(1);
-		});
+		.par_iter()
+		.find_any(|datapack| datapack.name == name)
+		.cloned()
+		.map(|loader| {
+			let datapack = Datapack::generate(&loader.path, event).unwrap();
+			loader.cleanup();
+			datapack
+		})
+		.ok_or(MergeError::Other("Cannot find core datapack"))
+}
 
-	let merged_datapack = new_datapack.merge(core_datapack);
+fn get_other_datapack(
+	name: &str,
+	datapacks: &[DatapackLoader],
+	event: impl Fn(u64) + Sync + Send + Copy,
+) -> (Vec<Datapack>, Vec<u64>) {
+	datapacks
+		.par_iter()
+		.filter(|loader| loader.name != name)
+		.map(|loader| {
+			let datapack = Datapack::generate(&loader.path, event).unwrap();
+			loader.cleanup();
+			datapack
+		})
+		.unzip()
+}
 
-	remove_dir_all(temp_dir)?;
-
-	merging_progress_bar.finish_with_message("[Finished]");
-
-	let merged_datapack_path = PathBuf::from(format!("{}.zip", merged_datapack_name));
-	let output_path = directory.join(merged_datapack_path);
-
-	let template = format!("[{{elapsed}}] {} [{{wide_bar:.cyan/white}}] {{percent:>3}}% {{msg}}", "Compiling...".yellow().bold());
-	let compiling_progress_bar = ProgressBar::new(1)
-		.with_style(ProgressStyle::default_bar()
-			.template(&template)
-			.progress_chars("#>_")
-		);
-
-	merged_datapack.compile(&output_path, compiling_progress_bar)?;
-
-	println!("Output merged datapack to: '{}'", output_path.display().to_string().cyan());
-
-	Ok(())
+fn get_output_path(directory: impl Into<PathBuf>, name: &str) -> PathBuf {
+	let directory = directory.into();
+	let output_file = PathBuf::from(format!("{}.zip", name));
+	directory.join(output_file)
 }

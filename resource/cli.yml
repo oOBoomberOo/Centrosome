@@ -1,5 +1,5 @@
 name: Oxidized Centrosome
-version: "0.1.4"
+version: "0.2.0"
 author: Boomber <boomberisalreadytaken@gmail.com>
 about: A fork of "Centrosome by Cocoon", a simple datapack merger rewritten in Rust
 args:

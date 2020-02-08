@@ -4,8 +4,14 @@ Oxidized Centrosome is a fork of "Centrosome by Cocoon" rewritten in Rust. (Yes,
 ## About
 Oxidized Centrosome is a command-line tool that provide automatic datapack merging with a simple command with amazing speed.
 
+## Getting Started
+1) Run command `centrosome <directory>` where `<directory>` is the directory that you put your datapacks inside.
+2) You will be asked to choose a "Core Datapack". This pack will have higher priority than other pack and will prefer to override other file in case of conflict.
+3) ???
+4) Profit!
+
 ## Installation
-### Install with cargo (Recommended/All OS)
+### Install with cargo (Recommended/ All OS)
 1) Install [Rust](https://www.rust-lang.org/tools/install).
 2) Build Centrosome via cargo (`cargo install centrosome`)
 3) You should be able to run `centrosome` command without a problem now

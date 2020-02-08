@@ -1,193 +1,241 @@
-use super::{Merger, Namespace, MergeResult, ScriptFile, FileType};
-use crate::utils::{get_path_name, Result, get_compression_method};
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::fs;
+use super::{
+	CompiledResult, DataTree, GeneratedResult, MergedResult, Namespace, Script, ScriptKind,
+	TreeError,
+};
+use crate::utils::os_str_to_string;
+use std::collections::HashSet;
 use std::fs::File;
-use std::io::Write;
-use indicatif::ProgressBar;
-use zip::write::{ZipWriter, FileOptions};
+use std::path::PathBuf;
+use zip::write::FileOptions;
+use zip::ZipWriter;
 
-#[derive(Default, Clone, PartialEq, Eq)]
+/// A struct representing a datapack as a whole
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Datapack {
 	location: PathBuf,
-	meta: Vec<u8>,
 	pub name: String,
-	pub namespace: HashMap<String, Namespace>,
-	pub size: u64,
+	child: HashSet<Namespace>,
+	files: HashSet<Script>,
 }
 
 impl Datapack {
-	pub fn new(name: impl Into<String>, location: impl Into<PathBuf>) -> Datapack {
-		let name = name.into();
+	fn new(
+		location: impl Into<PathBuf>,
+		name: impl Into<String>,
+		child: HashSet<Namespace>,
+		files: HashSet<Script>,
+	) -> Datapack {
 		let location = location.into();
-		let meta = Vec::default();
+		let name = name.into();
 		Datapack {
-			meta,
 			location,
 			name,
-			namespace: HashMap::default(),
-			size: 0,
+			child,
+			files,
 		}
 	}
 
-	pub fn generate(location: impl Into<PathBuf>) -> Result<Datapack> {
-		let location = location.into();
-		let name = get_path_name(&location);
-		let mut namespace = HashMap::default();
-		let mut size = 0;
+	/// Because `Datapack` doesn't have the same data structure as the one implementing `DataTree`.
+	/// It cannot implement that trait itself so this function mimick `DataTree`'s generate() function
+	pub fn generate(
+		path: impl Into<PathBuf>,
+		event: impl Fn(u64) + Copy,
+	) -> GeneratedResult<Datapack> {
+		let path = path.into();
+		if path.is_dir() {
+			let mut child = HashSet::default();
+			let mut files = HashSet::default();
+			let mut size = 0;
+			for entry in path.read_dir()? {
+				let entry = entry?;
+				let name = os_str_to_string(entry.file_name());
 
-		for entry in location.join("data").read_dir()? {
-			if let Ok(entry) = entry {
-				let path = entry.path();
-				let name = get_path_name(&path);
-
-				if path.is_dir() {
-					let result = Namespace::generate(path).expect("Unable to generate namespace");
-					namespace.insert(name, result.script);
-					size += result.size;
+				if name != "data" {
+					match Script::generate(entry, ScriptKind::Generic, event) {
+						Ok((script, child_size)) => {
+							files.insert(script);
+							size += child_size;
+						}
+						Err(error) => eprintln!("{}", error),
+					}
 				}
 			}
-		}
 
-		let meta = fs::read(location.join("pack.mcmeta"))?;
+			for entry in path.join("data").read_dir()? {
+				let entry = entry?;
 
-		let datapack = Datapack {
-			meta,
-			location,
-			name,
-			namespace,
-			size,
-		};
-
-		Ok(datapack)
-	}
-
-	pub fn merge(&self, other: Datapack) -> Datapack {
-		let mut namespace = self.namespace.clone();
-
-		let size = other.namespace
-			.into_iter()
-			.filter_map(|(key, namespace)| match self.namespace.get(&key) {
-				Some(original) => original.merge(namespace, &key).ok(),
-				None => MergeResult::with_key(namespace, 1, &key)
-			})
-			.map(|merge_result| {
-				namespace.insert(merge_result.key, merge_result.script);
-				merge_result.size
-			})
-			.sum();
-
-		let location = other.location.to_owned();
-		let name = other.name.to_owned();
-		let meta = other.meta;
-
-		Datapack {
-			meta,
-			location,
-			namespace,
-			name,
-			size,
-		}
-	}
-
-	pub fn compile(self, output: &PathBuf, progress_bar: ProgressBar) -> Result<()> {
-		let writer = File::create(output)?;
-		let mut zip = ZipWriter::new(writer);
-		let option = FileOptions::default()
-			.compression_method(get_compression_method())
-			.unix_permissions(0o755);
-		
-		zip.start_file_from_path(&PathBuf::from("pack.mcmeta"), option)?;
-		let meta = self.meta.as_slice();
-		zip.write_all(meta)?;
-		
-		let files = self.reduce(PathBuf::default());
-		progress_bar.set_length(files.len() as u64);
-
-		for entry in files {
-			match entry.kind {
-				FileType::Folder => zip.add_directory_from_path(&entry.location, option)?,
-				FileType::File => {
-					zip.start_file_from_path(&entry.location, option)?;
-					zip.write_all(&entry.data)?;
+				match Namespace::generate(entry, ScriptKind::default(), event) {
+					Ok((namespace, child_size)) => {
+						child.insert(namespace);
+						size += child_size;
+					}
+					Err(error) => match error {
+						TreeError::FileInNamespace(_) => (),
+						_ => eprintln!("{}", error),
+					},
 				}
+			}
+
+			let name = os_str_to_string(&path.as_os_str());
+			let location = path;
+			let datapack = Datapack::new(location, name, child, files);
+			Ok((datapack, size))
+		} else {
+			Err(TreeError::FileInDatapack(path))
+		}
+	}
+
+	/// Because `Datapack` doesn't have the same data structure as the one implementing `DataTree`.
+	/// It cannot implement that trait itself so this function mimick `DataTree`'s merge() function
+	pub fn merge(&self, other: Datapack, event: impl Fn(u64) + Copy) -> MergedResult<Datapack> {
+		let mut child = self.child.clone();
+		for value in other.child {
+			let namespace = match child.get(&value) {
+				Some(original) => original.merge(value, event)?,
+				None => value,
 			};
 
-			progress_bar.inc(1);
+			child.insert(namespace);
+		}
+
+		let mut files = self.files.clone();
+		for value in other.files {
+			let script = match files.get(&value) {
+				Some(original) => original.merge(value, event)?,
+				None => value,
+			};
+
+			files.insert(script);
+		}
+
+		let result = Datapack::new(&self.location, &self.name, child, files);
+		Ok(result)
+	}
+
+	/// Because `Datapack` doesn't have the same data structure as the one implementing `DataTree`.
+	/// It cannot implement that trait itself so this function mimick `DataTree`'s compile() function
+	pub fn compile(
+		&self,
+		output_location: impl Into<PathBuf>,
+		options: &FileOptions,
+		event: impl Fn(u64) + Copy,
+	) -> CompiledResult<()> {
+		let output_location = output_location.into();
+		let writer = File::create(&output_location)?;
+		let mut zip = ZipWriter::new(writer);
+		let local_path = PathBuf::default();
+
+		for namespace in &self.child {
+			let path = local_path.join("data").join(&namespace.name);
+			namespace.compile(path, &mut zip, options, event)?;
+		}
+
+		for file in &self.files {
+			let path = local_path.join(&file.name);
+			file.compile(path, &mut zip, options, event)?;
 		}
 
 		zip.finish()?;
-		progress_bar.finish_with_message("[Finished]");
 
 		Ok(())
 	}
-
-	fn reduce(self, location: impl Into<PathBuf>) -> Vec<ScriptFile> {
-		let location = location.into();
-		let location = location.join("data");
-		let mut result: Vec<ScriptFile> = self.namespace
-			.into_iter()
-			.flat_map(|(_, namespace)| namespace.reduce(&location).into_iter())
-			.collect();
-		result.push(ScriptFile::from_raw(&location, Vec::default(), FileType::Folder));
-
-		result
-	}
 }
 
-use std::fmt;
-
-impl fmt::Debug for Datapack {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		if f.alternate() {
-			write!(f, "{} {:#?}", self.name, self.namespace)
-		} else {
-			write!(f, "{} {:?}", self.name, self.namespace)
+use std::fs::DirEntry;
+impl From<DirEntry> for Datapack {
+	fn from(entry: DirEntry) -> Datapack {
+		let location = entry.path();
+		let name = os_str_to_string(&entry.file_name());
+		let child = HashSet::default();
+		let files = HashSet::default();
+		Datapack {
+			location,
+			name,
+			child,
+			files,
 		}
 	}
 }
 
-impl fmt::Display for Datapack {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{}", self.name)
+impl From<PathBuf> for Datapack {
+	fn from(path: PathBuf) -> Datapack {
+		let name = os_str_to_string(path.file_name().unwrap());
+		let child = HashSet::default();
+		let location = path;
+		let files = HashSet::default();
+		Datapack {
+			location,
+			name,
+			child,
+			files,
+		}
+	}
+}
+
+use std::path::Path;
+impl From<&Path> for Datapack {
+	fn from(path: &Path) -> Datapack {
+		let name = os_str_to_string(path.as_os_str());
+		let child = HashSet::default();
+		let location = path.to_path_buf();
+		let files = HashSet::default();
+		Datapack {
+			location,
+			name,
+			child,
+			files,
+		}
+	}
+}
+
+use crate::DatapackLoader;
+impl From<DatapackLoader> for Datapack {
+	fn from(loader: DatapackLoader) -> Datapack {
+		let name = loader.name;
+		let child = HashSet::default();
+		let location = loader.path;
+		let files = HashSet::default();
+		Datapack {
+			location,
+			name,
+			child,
+			files,
+		}
 	}
 }
 
 #[cfg(test)]
 mod tests {
-	use super::{Datapack, HashMap, PathBuf, Namespace};
+	use super::*;
 
 	#[test]
-	fn init_datapack() {
-		let value = Datapack::new("Senku", "kingdom/of/science.txt");
-		let expect = Datapack {
-			meta: Vec::default(),
-			location: PathBuf::from("kingdom/of/science.txt"),
-			name: "Senku".to_string(),
-			namespace: HashMap::default(),
-			size: 0
-		};
-
-		assert_eq!(value, expect);
+	fn create_new_datapack() {
+		assert_eq!(
+			Datapack::new(
+				"/tmp/random_location",
+				"random_location",
+				HashSet::default(),
+				HashSet::default()
+			),
+			Datapack {
+				location: PathBuf::from("/tmp/random_location"),
+				name: String::from("random_location"),
+				child: HashSet::default(),
+				files: HashSet::default()
+			}
+		);
 	}
 
 	#[test]
-	fn reduce_simple_datapack() {
-		let mut datapack = Datapack::new("Hai Kazuma Desu", "konosuba.mov");
-		let boomber = Namespace::create("boomber", HashMap::default());
-		datapack.namespace.insert("boomber".to_string(), boomber);
-
-		let value = datapack.reduce("/").len();
-		let expect = 2;
-		assert_eq!(value, expect);
-	}
-
-	#[test]
-	fn reduce_complex_datapack() {
-		let datapack = Datapack::generate("test/reduce_complex_datapack").unwrap();
-		let result = datapack.reduce("/").len();
-		let expect = 40;
-		assert_eq!(result, expect);
+	fn create_new_datapack_from_path_buf() {
+		assert_eq!(
+			Datapack::from(PathBuf::from("/tmp/ZA_WARUDO")),
+			Datapack {
+				name: String::from("ZA_WARUDO"),
+				location: PathBuf::from("/tmp/ZA_WARUDO"),
+				child: HashSet::default(),
+				files: HashSet::default()
+			}
+		);
 	}
 }
