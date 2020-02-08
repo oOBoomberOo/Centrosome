@@ -11,7 +11,7 @@ Oxidized Centrosome is a command-line tool that provide automatic datapack mergi
 4) Profit!
 
 ## Installation
-### Install with cargo (Recommended/ All OS)
+### Install with cargo (Recommended/All OS)
 1) Install [Rust](https://www.rust-lang.org/tools/install).
 2) Build Centrosome via cargo (`cargo install centrosome`)
 3) You should be able to run `centrosome` command without a problem now
@@ -22,7 +22,7 @@ Oxidized Centrosome is a command-line tool that provide automatic datapack mergi
 3) Add 'PATH' to that binary.
 4) You should be able to run `centrosome` command now.
 
-### Install from binary (linux)
+### Install from binary (Linux)
 1) Download linux binary from [Release Page](https://github.com/oOBoomberOo/Centrosome/releases)
 2) Extract the zip file
 3) Move that binary into `/bin` or `/usr/bin` folder (make sure you give them execution permission as well)
