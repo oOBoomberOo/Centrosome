@@ -95,7 +95,7 @@ impl Datapack {
 				None => value,
 			};
 
-			child.insert(namespace);
+			child.replace(namespace);
 		}
 
 		let mut files = self.files.clone();
@@ -105,7 +105,7 @@ impl Datapack {
 				None => value,
 			};
 
-			files.insert(script);
+			files.replace(script);
 		}
 
 		let result = Datapack::new(&self.location, &self.name, child, files);

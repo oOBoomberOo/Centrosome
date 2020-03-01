@@ -145,7 +145,7 @@ impl DataTree for Script {
 
 					match script {
 						Ok(script) => {
-							child.insert(script);
+							child.replace(script);
 						}
 						Err(error) => eprintln!("{}", error),
 					};
@@ -167,6 +167,7 @@ impl DataTree for Script {
 		event: impl Fn(u64) + Copy,
 	) -> CompiledResult<()> {
 		let path: PathBuf = path.into();
+		
 		match &self.file_type {
 			FileType::Directory => {
 				zip.add_directory_from_path(&path, *options)?;

@@ -124,10 +124,18 @@ fn prepare_compiling_progress_bar(size: u64) -> ProgressBar {
 }
 
 use zip::write::FileOptions;
+#[cfg(not(windows))]
 fn prepare_zip_options() -> FileOptions {
 	FileOptions::default()
 		.compression_method(get_compression_method())
 		.unix_permissions(0o775)
+}
+
+/// Window doesn't have concept of "unix permissions", if we try to create a file with unix permissions it will result in Inaccessible file permission.
+#[cfg(windows)]
+fn prepare_zip_options() -> FileOptions {
+	FileOptions::default()
+		.compression_method(get_compression_method())
 }
 
 fn get_selection_items(datapack_entries: DatapackIterator) -> (Vec<String>, Vec<DatapackLoader>) {

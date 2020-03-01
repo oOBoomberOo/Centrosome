@@ -73,14 +73,13 @@ impl DataTree for Namespace {
 	}
 
 	fn merge(&self, other: Namespace, event: impl Fn(u64) + Copy) -> MergedResult<Namespace> {
-		let mut child = self.child.clone();
+		let mut child: HashSet<Script> = self.child.clone();
 		for value in other.child {
 			let script = match child.get(&value) {
 				Some(original) => original.merge(value, event)?,
 				None => value,
 			};
-
-			child.insert(script);
+			child.replace(script);
 		}
 
 		let name = other.name;
